@@ -8,5 +8,6 @@ edition = "2018"
 
 	failure      = "0.1.5"
 	serde        = "1.0.88"
-	serde_derive = "1.0.88"
-	serde-hjson  = { version = "0.9.0", default-features = false }
+	serde_yaml   = "0.8.8"
+
+	# serde-hjson  = { version = "0.9.0", default-features = false }

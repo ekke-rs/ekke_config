@@ -1,4 +1,4 @@
-use serde_hjson::{ Value };
+use serde_yaml::{ Value, Mapping };
 use std::mem;
 use std::mem::discriminant as discri;
 use std::collections::{ BTreeMap, btree_map::Entry };
@@ -33,34 +33,40 @@ impl Merge for Value
 			// value and knowing that a value of the correct type will always exist, whatever
 			// the user overrides.
 			//
-			Value::Null      => {},
+			Value::Null         => {},
+			Value::Bool     (_) => { mem::replace( self, other ); } ,
+			Value::Number   (_) => { mem::replace( self, other ); } ,
+			Value::String   (_) => { mem::replace( self, other ); } ,
+			Value::Sequence (_) => { mem::replace( self, other ); } ,
 
-			Value::Bool(_)   => { mem::replace( self, other ); } ,
-
-			Value::I64(_)    => { mem::replace( self, other ); } ,
-
-			Value::U64(_)    => { mem::replace( self, other ); } ,
-
-			Value::F64(_)    => { mem::replace( self, other ); } ,
-
-			Value::String(_) => { mem::replace( self, other ); } ,
-
-			Value::Array(y)  =>
+			Value::Mapping  (y) =>
 			{
-				if let Value::Array( x ) = self
-				{
-					x.merge( y )?;
-				}
-			},
-
-			Value::Object(y) =>
-			{
-				if let Value::Object( x ) = self
+				if let Value::Mapping( x ) = self
 				{
 					x.merge( y )?;
 				}
 			},
 		};
+
+		Ok(())
+	}
+}
+
+
+
+impl Merge for Mapping
+{
+	fn merge( &mut self, other: Self ) -> EkkeResult<()>
+	{
+		for (k, v) in other.into_iter()
+		{
+			match self.get_mut( &k )
+			{
+				Some( val ) => { val .merge (    v )?; },
+				None        => { self.insert( k, v ) ; },
+
+			}
+		}
 
 		Ok(())
 	}
@@ -111,7 +117,7 @@ mod tests
 {
 	use super::*;
 
-	use serde_hjson::{ from_str, Value };
+	use serde_yaml::{ from_str, Value };
 
 
 	// Takes away some boilerplate
@@ -133,7 +139,7 @@ mod tests
 	//
 	fn basic_array()
 	{
-		cmp( "[ 1 ]", "[ 2 ]", "[ 1, 2 ]" );
+		cmp( "[ 1 ]", "[ 2 ]", "[ 2 ]" );
 	}
 
 
@@ -151,7 +157,7 @@ mod tests
 	//
 	fn merge_empty_array()
 	{
-		cmp( "[ 1, 2 ]", "[]", "[ 1, 2 ]" );
+		cmp( "[ 1, 2 ]", "[]", "[]" );
 	}
 
 
@@ -160,7 +166,7 @@ mod tests
 	//
 	fn complex_array()
 	{
-		cmp( "[ 1, 3 ]", "[ 2, 4 ]", "[ 1, 3, 2, 4 ]" );
+		cmp( "[ 1, 3 ]", "[ 2, 4 ]", "[ 2, 4 ]" );
 	}
 
 
@@ -169,7 +175,7 @@ mod tests
 	//
 	fn overlap_array()
 	{
-		cmp( "[ 1, 3 ]", "[ 1, 2, 4 ]", "[ 1, 3, 2, 4 ]" );
+		cmp( "[ 1, 3 ]", "[ 1, 2, 4 ]", "[ 1, 2, 4 ]" );
 	}
 
 
@@ -189,7 +195,7 @@ mod tests
 	//
 	fn basic_object_bool()
 	{
-		cmp( "{ a: true\n }", "{ a: false\n }", "{ a: false\n }" );
+		cmp( "a: true", "a: false", "a: false" );
 	}
 
 
@@ -257,31 +263,25 @@ mod tests
 	//
 	fn nested_object()
 	{
-		let a = "
-		{
-			a: 1
-			obj:
-			{
-				bli: bli
-			}
-		}";
+		let a =
+"
+a: 1
+obj:
+  bli: bli
+";
 
-		let b = "
-		{
-			obj:
-			{
-				bli: bla
-			}
-		}";
+		let b =
+"
+obj:
+  bli: bla
+";
 
-		let expect = "
-		{
-			a: 1
-			obj:
-			{
-				bli: bla
-			}
-		}";
+		let expect =
+"
+a: 1
+obj:
+  bli: bla
+";
 
 		cmp( a, b, expect );
 	}
@@ -291,32 +291,26 @@ mod tests
 	//
 	fn u64_nested_object()
 	{
-		let a = "
-		{
-			a: 1
-			obj:
-			{
-				bli: bli
-			}
-		}";
+		let a =
+"
+a: 1
+obj:
+  bli: bli
+";
 
-		let b = "
-		{
-			a: 2
-			obj:
-			{
-				bli: bla
-			}
-		}";
+		let b =
+"
+a: 2
+obj:
+  bli: bla
+";
 
-		let expect = "
-		{
-			a: 2
-			obj:
-			{
-				bli: bla
-			}
-		}";
+		let expect =
+"
+a: 2
+obj:
+  bli: bla
+";
 
 		cmp( a, b, expect );
 	}
@@ -326,32 +320,26 @@ mod tests
 	//
 	fn u64_nested_array()
 	{
-		let a = "
-		{
-			a: 1
-			obj:
-			{
-				bli: [ 1 ]
-			}
-		}";
+		let a =
+"
+a: 1
+obj:
+  bli: [ 1 ]
+";
 
-		let b = "
-		{
-			a: 2
-			obj:
-			{
-				bli: [ 2, 4 ]
-			}
-		}";
+		let b =
+"
+a: 2
+obj:
+  bli: [ 2, 4 ]
+";
 
-		let expect = "
-		{
-			a: 2
-			obj:
-			{
-				bli: [ 1, 2, 4 ]
-			}
-		}";
+		let expect =
+"
+a: 2
+obj:
+  bli: [ 2, 4 ]
+";
 
 		cmp( a, b, expect );
 	}

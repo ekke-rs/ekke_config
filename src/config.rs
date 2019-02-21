@@ -1,13 +1,18 @@
 
 // use serde_derive:: { Serialize, Deserialize };
 // use serde::ser:: { Serialize, Serializer };
-use serde_hjson :: { Value, from_str   };
+use serde_yaml :: { Value, from_str   };
 use crate       :: { Merge, EkkeResult };
 use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path };
 use failure     :: { Error };
 
 
-#[ derive( Debug, Clone, PartialEq ) ]
+/// A configuration object that can be created from multiple layers of yaml input. Later
+/// input that is added by merge will merge into the earlier data and override options
+/// that are already set. Objects will be merged recursively.
+/// Arrays contents will be replaced.
+///
+#[ derive( Debug, Clone, PartialEq, Eq ) ]
 //
 pub struct Config
 {
@@ -19,33 +24,46 @@ impl Config
 {
 	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
 	///
-	pub fn find<'a>(&'a self, key: &str) -> Option<&'a Value>
+	pub fn pointer<'a>( &'a self, pointer: &str ) -> Option< &'a Value >
 	{
-		self.data.find( key )
-	}
+		fn parse_index( s: &str ) -> Option< usize >
+		{
+			if s.starts_with( '+' ) || ( s.starts_with( '0' ) && s.len() != 1 )
+			{
+				return None;
+			}
+
+			s.parse().ok()
+		}
 
 
-	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
-	///
-	pub fn find_path<'a>(&'a self, keys: &[&str]) -> Option<&'a Value>
-	{
-		self.data.find_path( keys )
-	}
+		if  pointer == ""              { return Some( &self.data ) }
+		if !pointer.starts_with( '/' ) { return None               }
 
 
-	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
-	///
-	pub fn pointer<'a>(&'a self, pointer: &str) -> Option<&'a Value>
-	{
-		self.data.pointer( pointer )
-	}
+		let mut target = &self.data;
+
+		for escaped_token in pointer.split( '/' ).skip(1)
+		{
+			let token = escaped_token.replace( "~0", "~" ).replace( "~1", "/" );
 
 
-	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
-	///
-	pub fn search<'a>(&'a self, key: &str) -> Option<&'a Value>
-	{
-		self.data.search( key )
+			let target_opt = match *target
+			{
+				Value::Mapping ( ref map  ) => map.get    ( &token.into() )                             ,
+				Value::Sequence( ref list ) => parse_index( &token        ).and_then( |x| list.get(x) ) ,
+				_                           => return None                                              ,
+			};
+
+			match target_opt
+			{
+				Some( t ) => target = t ,
+				None      => return None,
+			}
+		}
+
+
+		Some( target )
 	}
 }
 
@@ -63,7 +81,7 @@ use serde::ser;
 
 impl ser::Serialize for Config
 {
-	fn serialize< S >( &self, serializer: &mut S ) -> Result< (), S::Error > where S: ser::Serializer
+	fn serialize< S >( &self, serializer: S ) -> Result< S::Ok, S::Error > where S: ser::Serializer
 	{
 		self.data.serialize( serializer )
 	}
@@ -136,21 +154,47 @@ mod tests
 	fn pointer_basic()
 	{
 		let a_s =
-"{
-  arr:
-  [
-    some
-    strings
-    in
-    array
-  ]
-}";
+"---
+arr:
+  - some
+  - strings
+  - in
+  - array";
 
 		let cfg = Config::try_from( a_s ).unwrap();
 
 		assert_eq!( cfg.pointer( "/arr/0" ).unwrap().as_str(), Some( "some" ) );
 
-		assert_eq!( a_s, serde_hjson::ser::to_string( &cfg ).unwrap() )
+		assert_eq!( a_s, serde_yaml::to_string( &cfg ).unwrap() )
+	}
+
+
+
+	// Test try_from( &str )
+	// Test pointer()
+	// Test serialize
+	//
+	#[test]
+	//
+	fn pointer_nested_object()
+	{
+		let a_s =
+"---
+arr:
+  - some
+  - bli: bla
+    blo:
+      - 44
+      - 66
+      - 77
+  - in
+  - array";
+
+		let cfg = Config::try_from( a_s ).unwrap();
+
+		assert_eq!( cfg.pointer( "/arr/1/blo/2" ).unwrap(), 77 );
+
+		assert_eq!( a_s, serde_yaml::to_string( &cfg ).unwrap() )
 	}
 
 }

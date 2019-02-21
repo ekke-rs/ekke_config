@@ -1,5 +1,5 @@
-use failure     :: { Error, Fail  } ;
-use serde_hjson :: { Value } ;
+use failure    :: { Error, Fail  } ;
+use serde_yaml :: { Value } ;
 
 
 /// Custom result type, Allows to omit error type since it's always
