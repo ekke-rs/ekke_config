@@ -1,5 +1,4 @@
 use failure    :: { Error, Fail  } ;
-use serde_yaml :: { Value } ;
 
 
 /// Custom result type, Allows to omit error type since it's always
@@ -14,11 +13,7 @@ pub type EkkeResult<T> = Result< T, Error >;
 //
 pub enum EkkeCfgError
 {
-	#[ fail( display = "Cannot merge two config values of different types: {:#?} and {:#?}", _0, _1 ) ]
-	//
-	MergeWrongType( Value, Value ),
-
-	#[ fail( display = "Cannot unset configuration value by setting it to Null" ) ]
+	#[ fail( display = "Cannot unset default configuration value by setting it to Null" ) ]
 	//
 	UnsetConfig,
 }

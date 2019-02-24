@@ -1,8 +1,10 @@
 [package]
-name = "ekke_config"
-version = "0.1.0"
-authors = ["Naja Melan <najamelan@autistici.org>"]
-edition = "2018"
+
+	name    = "ekke_config"
+	version = "0.1.0"
+	authors = ["Naja Melan <najamelan@autistici.org>"]
+	edition = "2018"
+
 
 [dependencies]
 
@@ -10,4 +12,4 @@ edition = "2018"
 	serde        = "1.0.88"
 	serde_yaml   = "0.8.8"
 
-	# serde-hjson  = { version = "0.9.0", default-features = false }
+	ekke_merge   = { path = "../ekke_merge", features = [ "serdeyaml" ] }

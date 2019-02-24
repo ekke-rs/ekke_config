@@ -1,10 +1,9 @@
-
-// use serde_derive:: { Serialize, Deserialize };
-// use serde::ser:: { Serialize, Serializer };
-use serde_yaml :: { Value, from_str   };
-use crate       :: { Merge, EkkeResult };
-use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path };
-use failure     :: { Error };
+use failure     :: { Error                                                           } ;
+use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf } ;
+use serde       :: { ser, /*de*/                                                         } ;
+use serde_yaml  :: { Value, from_str                                                 } ;
+use crate       :: { EkkeResult                                               } ;
+use ekke_merge :: { Merge };
 
 
 /// A configuration object that can be created from multiple layers of yaml input. Later
@@ -12,7 +11,7 @@ use failure     :: { Error };
 /// that are already set. Objects will be merged recursively.
 /// Arrays contents will be replaced.
 ///
-#[ derive( Debug, Clone, PartialEq, Eq ) ]
+#[ derive( Debug, Clone, PartialEq, Eq, Default ) ]
 //
 pub struct Config
 {
@@ -24,7 +23,7 @@ impl Config
 {
 	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
 	///
-	pub fn pointer<'a>( &'a self, pointer: &str ) -> Option< &'a Value >
+	pub fn get<'a>( &'a self, pointer: &str ) -> Option< &'a Value >
 	{
 		fn parse_index( s: &str ) -> Option< usize >
 		{
@@ -77,7 +76,6 @@ impl Merge for Config
 }
 
 
-use serde::ser;
 
 impl ser::Serialize for Config
 {
@@ -139,6 +137,21 @@ impl TryFrom< &Path > for Config
 
 
 
+/// Convert from a file containing an hjson string
+///
+impl TryFrom< &PathBuf > for Config
+{
+	type Error = Error;
+
+	fn try_from( path: &PathBuf ) -> Result< Self, Self::Error >
+	{
+		let file = File::open( path )?;
+		Config::try_from( &file )
+	}
+}
+
+
+
 #[ cfg( test ) ]
 //
 mod tests
@@ -163,7 +176,7 @@ arr:
 
 		let cfg = Config::try_from( a_s ).unwrap();
 
-		assert_eq!( cfg.pointer( "/arr/0" ).unwrap().as_str(), Some( "some" ) );
+		assert_eq!( cfg.get( "/arr/0" ).unwrap().as_str(), Some( "some" ) );
 
 		assert_eq!( a_s, serde_yaml::to_string( &cfg ).unwrap() )
 	}
@@ -192,7 +205,7 @@ arr:
 
 		let cfg = Config::try_from( a_s ).unwrap();
 
-		assert_eq!( cfg.pointer( "/arr/1/blo/2" ).unwrap(), 77 );
+		assert_eq!( cfg.get( "/arr/1/blo/2" ).unwrap(), 77 );
 
 		assert_eq!( a_s, serde_yaml::to_string( &cfg ).unwrap() )
 	}
