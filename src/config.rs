@@ -1,9 +1,9 @@
-use failure     :: { Error                                                           } ;
+use failure     :: { Error                                                                          } ;
 use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf } ;
-use serde       :: { ser, /*de*/                                                         } ;
-use serde_yaml  :: { Value, from_str                                                 } ;
-use crate       :: { EkkeResult                                               } ;
-use ekke_merge :: { Merge };
+use serde       :: { ser::Serialize, Deserialize, /*ser::Serializer,*/ de::DeserializeOwned                          } ;
+use serde_yaml  :: { Value, Mapping, from_str                                                                } ;
+use crate       :: { EkkeCfgError                                                                     } ;
+use ekke_merge  :: { Merge, MergeResult                                                                        } ;
 
 
 /// A configuration object that can be created from multiple layers of yaml input. Later
@@ -11,100 +11,196 @@ use ekke_merge :: { Merge };
 /// that are already set. Objects will be merged recursively.
 /// Arrays contents will be replaced.
 ///
-#[ derive( Debug, Clone, PartialEq, Eq, Default ) ]
+#[ derive( Debug, Clone, PartialEq, Eq, Default, Deserialize ) ]
 //
-pub struct Config
+pub struct Config<T> where T: Merge + Clone + Serialize
 {
-	data: Value,
+	defaults : T               ,
+	settings : T               ,
+	meta     : Mapping         ,
+	userset  : Option< Mapping > ,
+	runtime  : Option< Mapping > ,
 }
 
 
-impl Config
+impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
-	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
-	///
-	pub fn get<'a>( &'a self, pointer: &str ) -> Option< &'a Value >
+	pub fn merge_runtime( &mut self, input: &str ) -> MergeResult<()>
 	{
-		fn parse_index( s: &str ) -> Option< usize >
+		let rt2: Value = from_str( input )?;
+
+		let rt: Mapping = match rt2
 		{
-			if s.starts_with( '+' ) || ( s.starts_with( '0' ) && s.len() != 1 )
-			{
-				return None;
-			}
+			Value::Mapping(x) => x,
+			_                 => return Err( EkkeCfgError::ConfigParse.into() )
+		};
 
-			s.parse().ok()
-		}
-
-
-		if  pointer == ""              { return Some( &self.data ) }
-		if !pointer.starts_with( '/' ) { return None               }
-
-
-		let mut target = &self.data;
-
-		for escaped_token in pointer.split( '/' ).skip(1)
+		let data: &mut Mapping = match self.meta.get_mut( &Value::from( "default" ) ).unwrap()
 		{
-			let token = escaped_token.replace( "~0", "~" ).replace( "~1", "/" );
+			Value::Mapping(x) => x,
+			_                 => return Err( EkkeCfgError::ConfigParse.into() )
+		};
+
+		data.merge( rt.clone() ).unwrap();
+
+		self.runtime = Some( rt );
+
+		self.settings =  from_str( &serde_yaml::to_string( &data )? )? ;
+
+		Ok(())
+	}
+
+	pub fn merge_userset( &mut self, _input: &str ) -> MergeResult<()>
+	{
+
+		Ok(())
+	}
 
 
-			let target_opt = match *target
-			{
-				Value::Mapping ( ref map  ) => map.get    ( &token.into() )                             ,
-				Value::Sequence( ref list ) => parse_index( &token        ).and_then( |x| list.get(x) ) ,
-				_                           => return None                                              ,
-			};
+	pub fn get( &self ) -> &T
+	{
+		&self.settings
+	}
 
-			match target_opt
-			{
-				Some( t ) => target = t ,
-				None      => return None,
-			}
+
+	pub fn default( &self ) -> &T
+	{
+		&self.defaults
+	}
+
+
+	pub fn userset( &self ) -> Option< &Mapping >
+	{
+		match &self.userset
+		{
+			Some( value ) => Some( &value ),
+			None          => None          ,
 		}
+	}
 
 
-		Some( target )
+	pub fn runtime( &self ) -> Option< &Mapping >
+	{
+		match &self.runtime
+		{
+			Some( value ) => Some( &value ),
+			None          => None          ,
+		}
 	}
 }
 
-
-impl Merge for Config
+/*
+impl<T> Merge for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
 	fn merge( &mut self, other: Self ) -> EkkeResult<()>
 	{
 		self.data.merge( other.data )
 	}
-}
+}*/
 
 
-
-impl ser::Serialize for Config
+/*
+impl<T> Serialize for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
-	fn serialize< S >( &self, serializer: S ) -> Result< S::Ok, S::Error > where S: ser::Serializer
+	fn serialize< S >( &self, serializer: S ) -> Result< S::Ok, S::Error > where S: Serializer
 	{
 		self.data.serialize( serializer )
 	}
-}
+}*/
 
 
 
-/// Convert from hjson string
+
+/// Convert from yaml string
 ///
-impl TryFrom< &str > for Config
+impl<T> TryFrom< &str > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 
 	fn try_from( input: &str ) -> Result< Self, Self::Error >
 	{
-		let data: Value = from_str( input )?;
+		let mut meta    : serde_yaml::Mapping = from_str( input )? ;
+		let data: &mut Mapping;
+		let mut userset: Option< Mapping > = None;
 
-		Ok( Config { data } )
+		let mut user_conf = None;
+
+		// Get the userset config file
+		//
+		if let Some( path ) = meta.get( &Value::from( "userset" ) )
+		{
+			if let Value::String( path ) = path
+			{
+				user_conf = Some( path.clone() )
+			}
+
+			else
+			{
+				return Err( EkkeCfgError::ConfigParse.into() )
+			}
+		}
+
+		// Separate metas from actual client settings
+		//
+		if let Some( map ) = meta.get_mut( &Value::from( "default" ) )
+		{
+			data = match map
+			{
+				Value::Mapping(x) => x,
+				_                 => return Err( EkkeCfgError::ConfigParse.into() )
+			};
+		}
+
+		else
+		{
+			return Err( EkkeCfgError::ConfigParse.into() )
+		}
+
+
+		let defaults: T     = from_str( &serde_yaml::to_string( &data )? )? ;
+
+
+		// Get the userset config file
+		//
+		if let Some( path ) = user_conf
+		{
+			let file = File::open( path )?;
+			let mut buf_reader = BufReader::new( file );
+			let mut contents = String::new();
+			buf_reader.read_to_string( &mut contents )?;
+
+			let users: Value = from_str( &contents )?;
+
+			let users2 = match users
+			{
+				Value::Mapping(x) => x,
+				_                 => return Err( EkkeCfgError::ConfigParse.into() )
+			};
+
+
+			userset = Some( users2.clone() );
+
+			data.merge( users2 )?;
+		}
+
+		let settings: T     = from_str( &serde_yaml::to_string( &data )? )? ;
+
+		Ok( Config
+		{
+			defaults                         ,
+			settings                         ,
+			userset                          ,
+			meta    : meta ,
+			runtime : None                   ,
+		})
 	}
 }
 
 
-/// Convert from a file containing an hjson string
+
+/// Convert from a file containing an yaml string
 ///
-impl TryFrom< &File > for Config
+impl<T> TryFrom< &File > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 
@@ -112,19 +208,17 @@ impl TryFrom< &File > for Config
 	{
 		let mut buf_reader = BufReader::new(file);
 		let mut contents = String::new();
-		buf_reader.read_to_string(&mut contents)?;
+		buf_reader.read_to_string( &mut contents )?;
 
-		let data: Value = from_str( &contents )?;
-
-		Ok( Config { data } )
+		Config::try_from( contents.as_str() )
 	}
 }
 
 
 
-/// Convert from a file containing an hjson string
+/// Convert from a file containing an yaml string
 ///
-impl TryFrom< &Path > for Config
+impl<T> TryFrom< &Path > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 
@@ -137,9 +231,9 @@ impl TryFrom< &Path > for Config
 
 
 
-/// Convert from a file containing an hjson string
+/// Convert from a file containing an yaml string
 ///
-impl TryFrom< &PathBuf > for Config
+impl<T> TryFrom< &PathBuf > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 
@@ -156,58 +250,8 @@ impl TryFrom< &PathBuf > for Config
 //
 mod tests
 {
-	use super::*;
-
-	// Test try_from( &str )
-	// Test pointer()
-	// Test serialize
-	//
-	#[test]
-	//
-	fn pointer_basic()
-	{
-		let a_s =
-"---
-arr:
-  - some
-  - strings
-  - in
-  - array";
-
-		let cfg = Config::try_from( a_s ).unwrap();
-
-		assert_eq!( cfg.get( "/arr/0" ).unwrap().as_str(), Some( "some" ) );
-
-		assert_eq!( a_s, serde_yaml::to_string( &cfg ).unwrap() )
-	}
+	// use super::*;
 
 
-
-	// Test try_from( &str )
-	// Test pointer()
-	// Test serialize
-	//
-	#[test]
-	//
-	fn pointer_nested_object()
-	{
-		let a_s =
-"---
-arr:
-  - some
-  - bli: bla
-    blo:
-      - 44
-      - 66
-      - 77
-  - in
-  - array";
-
-		let cfg = Config::try_from( a_s ).unwrap();
-
-		assert_eq!( cfg.get( "/arr/1/blo/2" ).unwrap(), 77 );
-
-		assert_eq!( a_s, serde_yaml::to_string( &cfg ).unwrap() )
-	}
 
 }

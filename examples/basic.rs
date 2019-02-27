@@ -1,77 +1,70 @@
-fn main(){}
+use ekke_config      :: { Config, Pointer                     };
+use std              :: { convert::TryFrom, fs::File };
+use ekke_merge       :: { MergeResult                      };
+use ekke_merge_derive:: { Merge                      };
 
-// #![ feature( try_from ) ]
-
-// use ekke_config :: { Config, Merge };
-// use std         :: { convert::TryFrom, fs::File };
-
-
-// fn main() -> Result<(), failure::Error>
-// {
-// 	// imagine a defaults.yml, normally we would write:
-// 	//
-// 	//   Config::try_from( &File::open( "defaults.yml" )? )?;
-// 	//
-// 	// For the example we will use inline strings instead.
-// 	//
-// 	// Config can implements std::convert::TryFrom: &str, &std::file::File, &std::path::Path, &std::path::Pathbuf
-// 	//
-// 	let mut defaults = Config::try_from(
-// "
-// user_conf: /home/user/myapp.yml
-
-// MyApp:
-//   db_path: /home/user/db.sqlite
-//   log_lvl: debug
-
-// OtherComponent:
-//   primes: [ 1, 3, 5, 7 ]
-//   algo  : fournier
-// ")?;
+use serde       :: { Serialize, Deserialize                          } ;
+use serde_yaml  :: { Value,                                                                 } ;
 
 
-// 	// This won't do anything here since the file doesn't exist. We just use inline strings for the example.
-// 	// Shows how to have an optional user config. This just does nothing if errors occur. You might want to
-// 	// handle them.
-// 	//
-// 	if let Some( value ) = defaults.get( "/user_conf" ) {
-// 	if let Some( path  ) = value.as_str()               {
-// 	if let Ok  ( file  ) = File::open( &path )
-// 	{
+#[ derive( Serialize, Deserialize, Debug, Clone, Merge ) ]
+//
+struct Settings
+{
+	pub my_app    : MyAppOpts,
+	pub other_comp: OtherCompOpts,
+}
 
-// 		defaults.merge( Config::try_from( &file )? )?;
+#[ derive( Serialize, Deserialize, Debug, Clone, Merge ) ]
+//
+struct MyAppOpts
+{
+	pub db_path: String,
+	pub log_lvl: String,
+}
 
-// 	}}}
-
-
-// 	let user_conf = Config::try_from(
-// "
-// MyApp:
-//   db_path: /home/user/myapp.sqlite
-//   log_lvl: warn
-
-// OtherComponent:
-//   primes: [ 1, 3, 5, 7, 11 ]
-//   algo  : euler
-// ")?;
-
-// 	// Clone the defaults if you want to keep the defaults for reference.
-// 	//
-// 	let mut settings = defaults.clone();
-// 	settings.merge( user_conf )?;
-
-// 	// new values are merged in
-// 	//
-// 	assert_eq!( settings.get( "/OtherComponent/algo" ).unwrap().as_str().unwrap(), "euler" );
-
-// 	// new values are merged in
-// 	//
-// 	assert_eq!( settings.get( "/OtherComponent/primes/4" ).unwrap().as_u64().unwrap(), 11 );
-
-// 	// unexisting values in the user_conf remain untouched
-// 	//
-// 	assert_eq!( settings.get( "/user_conf" ).unwrap().as_str().unwrap(), "/home/user/myapp.yml" );
+#[ derive( Serialize, Deserialize, Debug, Clone, Merge ) ]
+//
+struct OtherCompOpts
+{
+	pub primes: Vec<usize>,
+	pub algo  : String    ,
+}
 
 
-// 	Ok(())
-// }
+fn main() -> Result<(), failure::Error>
+{
+	// imagine a defaults.yml, normally we would write:
+	//
+	//   Config::try_from( &File::open( "defaults.yml" )? )?;
+	//
+	// For the example we will use inline strings instead.
+	//
+	// Config can implements std::convert::TryFrom: &str, &std::fs::File, &std::path::Path, &std::path::Pathbuf
+	//
+	let mut settings: Config<Settings> = Config::try_from( &File::open( "data/defaults.yml" )? )?;
+
+	settings.merge_runtime( "my_app: { log_lvl: info }" )?;
+
+
+	// new values are merged in
+	//
+	assert_eq!( settings.get().other_comp.algo    , "euler"           );
+	assert_eq!( settings.get().my_app.log_lvl     , "info"            );
+
+	// defaults and userset are still available
+	//
+	assert_eq!( settings.default().my_app.log_lvl , "debug"           );
+
+
+	// This is ugly at the moment. Since userset and runtime can pass in incomplete settings, we cannot return a Settings object, so you get a serde_yaml::Value.
+	//
+	assert_eq!( Value::Mapping( settings.userset().unwrap().clone() ).pointer( "/my_app/log_lvl" ).unwrap() , "warn"            );
+	assert_eq!( Value::Mapping( settings.runtime().unwrap().clone() ).pointer( "/my_app/log_lvl" ).unwrap() , "info"            );
+
+	// defaults bubble through if not overridden
+	//
+	assert_eq!( settings.get().my_app.db_path     , "data/db.sqlite"  );
+
+	Ok(())
+}

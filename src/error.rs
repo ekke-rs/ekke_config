@@ -16,4 +16,8 @@ pub enum EkkeCfgError
 	#[ fail( display = "Cannot unset default configuration value by setting it to Null" ) ]
 	//
 	UnsetConfig,
+
+	#[ fail( display = "Failed to parse Configuration" ) ]
+	//
+	ConfigParse,
 }

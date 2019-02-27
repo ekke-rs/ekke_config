@@ -1,0 +1,7 @@
+my_app:
+  log_lvl: warn
+
+other_comp:
+  primes: [ 1, 3, 5, 7, 11 ]
+  algo  : euler
+
