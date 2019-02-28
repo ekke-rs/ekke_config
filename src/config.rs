@@ -12,7 +12,7 @@ use ekke_merge  :: { Merge, MergeResult                                         
 ///
 #[ derive( Debug, Clone, PartialEq, Eq, Default, Deserialize ) ]
 //
-pub struct Config<T> where T: Merge + Clone + Serialize
+pub struct Config<T> where T: Clone + Serialize
 {
 	settings : T                 ,
 
@@ -26,7 +26,8 @@ pub struct Config<T> where T: Merge + Clone + Serialize
 }
 
 
-impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
+
+impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
 {
 	/// Merge userset settings into this config. Usually userset configuration comes
 	/// from a file in the users home directory, but in case the program allows modifying
@@ -198,7 +199,7 @@ impl<T> Serialize for Config<T> where T: Merge + Clone + DeserializeOwned + Seri
 
 /// Convert from yaml string
 ///
-impl<T> TryFrom< &str > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 
@@ -276,7 +277,7 @@ impl<T> TryFrom< &str > for Config<T> where T: Merge + Clone + DeserializeOwned 
 
 /// Convert from a file containing an yaml string
 ///
-impl<T> TryFrom< &File > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &File > for Config<T> where T: Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 
@@ -294,7 +295,7 @@ impl<T> TryFrom< &File > for Config<T> where T: Merge + Clone + DeserializeOwned
 
 /// Convert from a file containing an yaml string
 ///
-impl<T> TryFrom< &Path > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &Path > for Config<T> where T: Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 
@@ -309,7 +310,7 @@ impl<T> TryFrom< &Path > for Config<T> where T: Merge + Clone + DeserializeOwned
 
 /// Convert from a file containing an yaml string
 ///
-impl<T> TryFrom< &PathBuf > for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &PathBuf > for Config<T> where T: Clone + DeserializeOwned + Serialize
 {
 	type Error = Error;
 

@@ -1,11 +1,10 @@
 use ekke_config :: { Config, Pointer               } ;
 use std         :: { convert::TryFrom, path::Path  } ;
-use ekke_merge  :: { Merge                         } ;
 use serde       :: { Serialize, Deserialize        } ;
 
 
 
-#[ derive( Serialize, Deserialize, Debug, Clone, Merge ) ]
+#[ derive( Serialize, Deserialize, Debug, Clone ) ]
 //
 struct Settings
 {
@@ -13,7 +12,7 @@ struct Settings
 	pub other_comp: OtherCompOpts,
 }
 
-#[ derive( Serialize, Deserialize, Debug, Clone, Merge ) ]
+#[ derive( Serialize, Deserialize, Debug, Clone ) ]
 //
 struct MyAppOpts
 {
@@ -21,7 +20,7 @@ struct MyAppOpts
 	pub log_lvl: String,
 }
 
-#[ derive( Serialize, Deserialize, Debug, Clone, Merge ) ]
+#[ derive( Serialize, Deserialize, Debug, Clone ) ]
 //
 struct OtherCompOpts
 {
