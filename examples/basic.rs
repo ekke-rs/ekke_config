@@ -1,10 +1,8 @@
-use ekke_config      :: { Config, Pointer                     };
-use std              :: { convert::TryFrom, fs::File };
-use ekke_merge       :: { MergeResult                      };
-use ekke_merge_derive:: { Merge                      };
+use ekke_config :: { Config, Pointer               } ;
+use std         :: { convert::TryFrom, path::Path  } ;
+use ekke_merge  :: { Merge                         } ;
+use serde       :: { Serialize, Deserialize        } ;
 
-use serde       :: { Serialize, Deserialize                          } ;
-use serde_yaml  :: { Value,                                                                 } ;
 
 
 #[ derive( Serialize, Deserialize, Debug, Clone, Merge ) ]
@@ -34,37 +32,44 @@ struct OtherCompOpts
 
 fn main() -> Result<(), failure::Error>
 {
-	// imagine a defaults.yml, normally we would write:
+	// Config implements std::convert::TryFrom:
+	// - &str
+	// - &std::fs::File
+	// - &std::path::Path
+	// - &std::path::Pathbuf
 	//
-	//   Config::try_from( &File::open( "defaults.yml" )? )?;
+	// This will read userset key from the root of the defaults.yml for a filename and merge
+	// in the user configuration file automatically.
 	//
-	// For the example we will use inline strings instead.
+	// userset and runtime configuration can be incomplete. Not all keys in Settings need to
+	// be present, but they must have the same layout so they can be merged.
 	//
-	// Config can implements std::convert::TryFrom: &str, &std::fs::File, &std::path::Path, &std::path::Pathbuf
-	//
-	let mut settings: Config<Settings> = Config::try_from( &File::open( "data/defaults.yml" )? )?;
+	let mut config: Config< Settings > = Config::try_from( Path::new( "data/defaults.yml" ) )?;
 
-	settings.merge_runtime( "my_app: { log_lvl: info }" )?;
+	config.merge_runtime( "my_app: { log_lvl: info }" )?;
 
 
 	// new values are merged in
 	//
-	assert_eq!( settings.get().other_comp.algo    , "euler"           );
-	assert_eq!( settings.get().my_app.log_lvl     , "info"            );
+	assert_eq!( config.get().my_app.log_lvl   , "info"                 );
+	assert_eq!( config.get().other_comp.algo  , "euler"                );
+	assert_eq!( config.get().other_comp.primes, vec![ 1, 3, 5, 7, 11 ] );
 
 	// defaults and userset are still available
 	//
-	assert_eq!( settings.default().my_app.log_lvl , "debug"           );
+	assert_eq!( config.default().my_app.log_lvl, "debug" );
 
 
-	// This is ugly at the moment. Since userset and runtime can pass in incomplete settings, we cannot return a Settings object, so you get a serde_yaml::Value.
+	// This is ugly at the moment. Since userset and runtime can pass in incomplete config,
+	// we cannot return a Settings object, so you get a Option< serde_yaml::Value >. ekke_config
+	// adds a json pointer lookup to serde_yaml::Value for more convenient lookup.
 	//
-	assert_eq!( Value::Mapping( settings.userset().unwrap().clone() ).pointer( "/my_app/log_lvl" ).unwrap() , "warn"            );
-	assert_eq!( Value::Mapping( settings.runtime().unwrap().clone() ).pointer( "/my_app/log_lvl" ).unwrap() , "info"            );
+	assert_eq!( config.userset().unwrap().jptr( "/my_app/log_lvl" ).unwrap() , "warn" );
+	assert_eq!( config.runtime().unwrap().jptr( "/my_app/log_lvl" ).unwrap() , "info" );
 
-	// defaults bubble through if not overridden
+	// defaults bubble up if not overridden
 	//
-	assert_eq!( settings.get().my_app.db_path     , "data/db.sqlite"  );
+	assert_eq!( config.get().my_app.db_path, "data/db.sqlite" );
 
 	Ok(())
 }

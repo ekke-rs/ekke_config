@@ -1,7 +1,20 @@
+# This is a special meta value for ekke_config. It tells it where to find the user configuration file.
+# Usually this will be somewhere in /home or /etc.
+#
+# This key is optional.
+#
 userset: data/userset.yml
 
+# Your actual settings. Only the default profile is supported for now.
+#
+# This key is mandatory.
+#
 default:
 
+  # From now on these are your settings, and user configuration file will only
+  # be presumed to have key from this level on. Eg. The "default:" key should not
+  # be present in user configuration files.
+  #
   my_app:
     db_path: data/db.sqlite
     log_lvl: debug

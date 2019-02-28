@@ -7,7 +7,7 @@ use failure    :: { Error, Fail  } ;
 pub type EkkeResult<T> = Result< T, Error >;
 
 
-/// The specific errors ekke_io can return.
+/// The specific errors ekke_config can return.
 ///
 #[ derive( Debug, Fail ) ]
 //

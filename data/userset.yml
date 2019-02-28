@@ -1,3 +1,5 @@
+# Override only one key several levels deep.
+#
 my_app:
   log_lvl: warn
 

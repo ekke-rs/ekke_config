@@ -12,5 +12,4 @@
 	serde        = { version = "1.0.88", features = ["derive"] }
 	serde_yaml   = "0.8.8"
 
-	ekke_merge   = { path = "../ekke_merge", features = [ "serdeyaml" ] }
-	ekke_merge_derive   = { path = "../ekke_merge_derive" }
+	ekke_merge   = { path = "../ekke_merge", features = [ "serdeyaml", "derive" ] }

@@ -1,15 +1,14 @@
-use failure     :: { Error                                                                          } ;
+use failure     :: { Error, Fail                                                                    } ;
 use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf } ;
-use serde       :: { ser::Serialize, Deserialize, /*ser::Serializer,*/ de::DeserializeOwned                          } ;
-use serde_yaml  :: { Value, Mapping, from_str                                                                } ;
-use crate       :: { EkkeCfgError                                                                     } ;
-use ekke_merge  :: { Merge, MergeResult                                                                        } ;
+use serde       :: { ser::Serialize, Deserialize, /*ser::Serializer,*/ de::DeserializeOwned         } ;
+use serde_yaml  :: { Value, Mapping, from_str                                                       } ;
+use crate       :: { EkkeResult, EkkeCfgError                                                       } ;
+use ekke_merge  :: { Merge, MergeResult                                                             } ;
 
 
 /// A configuration object that can be created from multiple layers of yaml input. Later
-/// input that is added by merge will merge into the earlier data and override options
-/// that are already set. Objects will be merged recursively.
-/// Arrays contents will be replaced.
+/// input will merge into the earlier data and override options that are already set.
+/// Objects will be merged recursively. Arrays contents will be replaced.
 ///
 #[ derive( Debug, Clone, PartialEq, Eq, Default, Deserialize ) ]
 //
@@ -25,68 +24,175 @@ pub struct Config<T> where T: Merge + Clone + Serialize
 
 impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
+
+
+	/// Merge userset settings into this config. Usually userset configuration comes
+	/// from a file in the users home directory, but in case the program allows modifying
+	/// configuration from a dialog, user configuration might change on runtime.
+	///
+	pub fn merge_userset( &mut self, input: &str ) -> MergeResult<()>
+	{
+		let us: Mapping = from_str( input )?;
+
+		// Merge the new settings into our datastore
+		//
+		self.get_profile()?.merge( us.clone() )?;
+
+		// Store runtime for later reference
+		//
+		match &mut self.userset
+		{
+			None        => { self.userset = Some( us ); }
+			Some( cfg ) => { cfg.merge( us.clone() )? ; }
+		}
+
+		// If there are runtime settings, make sure to re-apply them
+		//
+		if let Some( rt ) = &self.runtime
+		{
+			let rtc = rt.clone();
+			self.get_profile()?.merge( rtc )?;
+		}
+
+		// Regenerate self.settings.
+		//
+		self.regen()?;
+
+		Ok(())
+	}
+
+
+	/// Add runtime configuration to the Config object. This will automatically be reflected
+	/// in the output of .get()
+	///
 	pub fn merge_runtime( &mut self, input: &str ) -> MergeResult<()>
 	{
-		let rt2: Value = from_str( input )?;
+		let rt: Mapping = from_str( input )?;
 
-		let rt: Mapping = match rt2
+		// Merge the new settings into our datastore
+		//
+		self.get_profile()?.merge( rt.clone() )?;
+
+		// Store runtime for later reference
+		//
+		match &mut self.runtime
 		{
-			Value::Mapping(x) => x,
-			_                 => return Err( EkkeCfgError::ConfigParse.into() )
-		};
+			None        => { self.runtime = Some( rt ); }
+			Some( cfg ) => { cfg.merge( rt.clone() )? ; }
+		}
 
-		let data: &mut Mapping = match self.meta.get_mut( &Value::from( "default" ) ).unwrap()
-		{
-			Value::Mapping(x) => x,
-			_                 => return Err( EkkeCfgError::ConfigParse.into() )
-		};
-
-		data.merge( rt.clone() ).unwrap();
-
-		self.runtime = Some( rt );
-
-		self.settings =  from_str( &serde_yaml::to_string( &data )? )? ;
-
-		Ok(())
-	}
-
-	pub fn merge_userset( &mut self, _input: &str ) -> MergeResult<()>
-	{
+		// Regenerate the settings with runtime merged in.
+		//
+		self.regen()?;
 
 		Ok(())
 	}
 
 
+	/// Get a reference to the actual settings. These are a result of merging in defaults,
+	/// userset and runtime.
+	///
 	pub fn get( &self ) -> &T
 	{
 		&self.settings
 	}
 
 
+	/// Get a reference to the default settings.
+	///
 	pub fn default( &self ) -> &T
 	{
 		&self.defaults
 	}
 
 
-	pub fn userset( &self ) -> Option< &Mapping >
+	/// Get a copy of the settings that where set by the user.
+	///
+	pub fn userset( &self ) -> Option< Value >
 	{
 		match &self.userset
 		{
-			Some( value ) => Some( &value ),
+			Some( value ) => Some( value.clone().into() ),
 			None          => None          ,
 		}
 	}
 
 
-	pub fn runtime( &self ) -> Option< &Mapping >
+	/// Get a copy of the settings that where added at runtime
+	///
+	pub fn runtime( &self ) -> Option< Value >
 	{
 		match &self.runtime
 		{
-			Some( value ) => Some( &value ),
+			Some( value ) => Some( value.clone().into() ),
 			None          => None          ,
 		}
 	}
+
+
+	// Regenerate the final settings from intermediate values. For when userset or runtime
+	// have changed.
+	//
+	fn regen( &mut self ) -> MergeResult<()>
+	{
+		self.settings = from_str( &serde_yaml::to_string( &self.get_profile()? )? )?;
+
+		Ok(())
+	}
+
+
+	// Get a mutable reference to the default profile in the datastore.
+	//
+	#[ inline ]
+	//
+	fn get_profile( &mut self ) -> EkkeResult< &mut Mapping >
+	{
+		Ok( val2map_mut( self.meta.get_mut( &"default".into() )
+
+			.ok_or( EkkeCfgError::ConfigParse )? )? )
+	}
+}
+
+
+/*fn val2map( val: Value ) -> EkkeResult< Mapping >
+{
+	match val
+	{
+		Value::Mapping(x) => Ok( x ),
+		_                 => return Err( EkkeCfgError::ConfigParse.into() )
+	}
+}
+
+
+fn val2map_ref( val: &Value ) -> EkkeResult< &Mapping >
+{
+	match val
+	{
+		Value::Mapping(x) => Ok( x ),
+		_                 => return Err( EkkeCfgError::ConfigParse.into() )
+	}
+}*/
+
+
+fn val2map_mut( val: &mut Value ) -> EkkeResult< &mut Mapping >
+{
+	match val
+	{
+		Value::Mapping(x) => Ok( x ),
+		_                 => return Err( EkkeCfgError::ConfigParse.into() )
+	}
+}
+
+
+fn read_file( path: &str ) -> EkkeResult< String >
+{
+	let     file       = File::open( path )?;
+	let mut buf_reader = BufReader::new( file );
+	let mut contents   = String::new();
+
+	buf_reader.read_to_string( &mut contents )?;
+
+	Ok( contents )
 }
 
 /*
@@ -119,71 +225,52 @@ impl<T> TryFrom< &str > for Config<T> where T: Merge + Clone + DeserializeOwned 
 
 	fn try_from( input: &str ) -> Result< Self, Self::Error >
 	{
-		let mut meta    : serde_yaml::Mapping = from_str( input )? ;
-		let data: &mut Mapping;
+		let mut meta   : Mapping           = from_str( input )? ;
 		let mut userset: Option< Mapping > = None;
 
 		let mut user_conf = None;
 
 		// Get the userset config file
+		// If it's present...
 		//
-		if let Some( path ) = meta.get( &Value::from( "userset" ) )
+		if let Some( path ) = meta.get( &"userset".into() )
 		{
-			if let Value::String( path ) = path
+			// ...it has to be a string
+			//
+			match path
 			{
-				user_conf = Some( path.clone() )
-			}
-
-			else
-			{
-				return Err( EkkeCfgError::ConfigParse.into() )
+				Value::String( path ) => user_conf = Some( path.clone() ),
+				_                     => return Err( EkkeCfgError::ConfigParse.context( "user_conf must be a string" ).into() )
 			}
 		}
 
-		// Separate metas from actual client settings
+		// Get client settings as &mut Mapping without the metas
 		//
-		if let Some( map ) = meta.get_mut( &Value::from( "default" ) )
-		{
-			data = match map
-			{
-				Value::Mapping(x) => x,
-				_                 => return Err( EkkeCfgError::ConfigParse.into() )
-			};
-		}
+		let data =
 
-		else
-		{
-			return Err( EkkeCfgError::ConfigParse.into() )
-		}
+			val2map_mut( meta.get_mut( &"default".into() )
+
+				.ok_or( EkkeCfgError::ConfigParse )? )?;
 
 
-		let defaults: T     = from_str( &serde_yaml::to_string( &data )? )? ;
+		// Store the actual settings as defaults
+		//
+		let defaults: T = from_str( &serde_yaml::to_string( &data )? )? ;
 
 
-		// Get the userset config file
+		// Read the userset config file
 		//
 		if let Some( path ) = user_conf
 		{
-			let file = File::open( path )?;
-			let mut buf_reader = BufReader::new( file );
-			let mut contents = String::new();
-			buf_reader.read_to_string( &mut contents )?;
+			let users: Mapping = from_str( &read_file( &path )? )?;
 
-			let users: Value = from_str( &contents )?;
+			userset = Some( users.clone() );
 
-			let users2 = match users
-			{
-				Value::Mapping(x) => x,
-				_                 => return Err( EkkeCfgError::ConfigParse.into() )
-			};
-
-
-			userset = Some( users2.clone() );
-
-			data.merge( users2 )?;
+			data.merge( users )?;
 		}
 
-		let settings: T     = from_str( &serde_yaml::to_string( &data )? )? ;
+
+		let settings: T = from_str( &serde_yaml::to_string( &data )? )? ;
 
 		Ok( Config
 		{

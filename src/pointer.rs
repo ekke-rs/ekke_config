@@ -3,14 +3,14 @@ use serde_yaml  :: { Value, /*Mapping*/ } ;
 
 pub trait Pointer
 {
-	fn pointer<'a>( &'a self, pointer: &str ) -> Option< &'a Value >;
+	fn jptr<'a>( &'a self, pointer: &str ) -> Option< &'a Value >;
 }
 
 impl Pointer for Value
 {
 	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
 	///
-	fn pointer<'a>( &'a self, pointer: &str ) -> Option< &'a Value >
+	fn jptr<'a>( &'a self, pointer: &str ) -> Option< &'a Value >
 	{
 		fn parse_index( s: &str ) -> Option< usize >
 		{
@@ -53,8 +53,8 @@ impl Pointer for Value
 	}
 }
 
-/*
 
+/*
 impl Pointer for Mapping
 {
 	/// See: https://docs.rs/serde-hjson/0.9.0/serde_hjson/value/enum.Value.html
@@ -72,7 +72,7 @@ impl Pointer for Mapping
 		}
 
 
-		if  pointer == ""              { return Some( &Value::Mapping( *self ) ) }
+		if  pointer == ""              { return Some( &Value::Mapping( self.clone() ) ) }
 		if !pointer.starts_with( '/' ) { return None               }
 
 
