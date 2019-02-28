@@ -15,7 +15,10 @@ use ekke_merge  :: { Merge, MergeResult                                         
 pub struct Config<T> where T: Merge + Clone + Serialize
 {
 	settings : T                 ,
-	meta     : Mapping           ,
+
+	// Meta settings
+	//
+	user_conf: Option< String  > ,
 
 	default  :         Mapping   ,
 	userset  : Option< Mapping > ,
@@ -33,24 +36,12 @@ impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 	{
 		let us: Mapping = from_str( input )?;
 
-		// Merge the new settings into our datastore
-		//
-		self.get_profile()?.merge( us.clone() )?;
-
 		// Store runtime for later reference
 		//
 		match &mut self.userset
 		{
 			None        => { self.userset = Some( us ); }
 			Some( cfg ) => { cfg.merge( us.clone() )? ; }
-		}
-
-		// If there are runtime settings, make sure to re-apply them
-		//
-		if let Some( rt ) = &self.runtime
-		{
-			let rtc = rt.clone();
-			self.get_profile()?.merge( rtc )?;
 		}
 
 		// Regenerate self.settings.
@@ -67,10 +58,6 @@ impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 	pub fn merge_runtime( &mut self, input: &str ) -> MergeResult<()>
 	{
 		let rt: Mapping = from_str( input )?;
-
-		// Merge the new settings into our datastore
-		//
-		self.get_profile()?.merge( rt.clone() )?;
 
 		// Store runtime for later reference
 		//
@@ -134,21 +121,14 @@ impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 	//
 	fn regen( &mut self ) -> MergeResult<()>
 	{
-		self.settings = from_str( &serde_yaml::to_string( &self.get_profile()? )? )?;
+		let mut settings = self.default.clone();
+
+		if let Some( us ) = &self.userset { settings.merge( us.clone() )?; }
+		if let Some( rt ) = &self.runtime { settings.merge( rt.clone() )?; }
+
+		self.settings = from_str( &serde_yaml::to_string( &settings )? )?;
 
 		Ok(())
-	}
-
-
-	// Get a mutable reference to the default profile in the datastore.
-	//
-	#[ inline ]
-	//
-	fn get_profile( &mut self ) -> EkkeResult< &mut Mapping >
-	{
-		Ok( val2map_mut( self.meta.get_mut( &"default".into() )
-
-			.ok_or( EkkeCfgError::ConfigParse )? )? )
 	}
 }
 
@@ -177,8 +157,8 @@ fn val2map_mut( val: &mut Value ) -> EkkeResult< &mut Mapping >
 {
 	match val
 	{
-		Value::Mapping(x) => Ok( x ),
-		_                 => return Err( EkkeCfgError::ConfigParse.into() )
+		Value::Mapping(x) => Ok ( x                                ),
+		_                 => Err( EkkeCfgError::ConfigParse.into() ),
 	}
 }
 
@@ -254,30 +234,40 @@ impl<T> TryFrom< &str > for Config<T> where T: Merge + Clone + DeserializeOwned 
 
 		// Store the actual settings as defaults
 		//
-		let default: Mapping = from_str( &serde_yaml::to_string( &data )? )?;
+		let mut default = Mapping::new();
+		std::mem::swap( &mut default, data );
 
 
 		// Read the userset config file
 		//
-		if let Some( path ) = user_conf
+		if let Some( path ) = &user_conf
 		{
 			let users: Mapping = from_str( &read_file( &path )? )?;
 
 			userset = Some( users.clone() );
-
-			data.merge( users )?;
 		}
 
 
-		let settings: T = from_str( &serde_yaml::to_string( &data )? )? ;
+		// Generate the final settings
+		//
+		let mut def = default.clone();
+
+		// Merge userset
+		//
+		if let Some( us ) = &userset { def.merge( us.clone() )?; }
+
+		// use deserialize, serialize to convert Mapping to T
+		//
+		let settings: T = from_str( &serde_yaml::to_string( &def )? )?;
+
 
 		Ok( Config
 		{
-			default        ,
-			settings       ,
-			userset        ,
-			meta    : meta ,
-			runtime : None ,
+			default         ,
+			settings        ,
+			user_conf       ,
+			userset         ,
+			runtime : None  ,
 		})
 	}
 }
