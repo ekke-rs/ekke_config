@@ -1,4 +1,4 @@
-use failure     :: { Error, Fail                                                                    } ;
+use failure     :: { Error, Fail, ResultExt                                                         } ;
 use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf } ;
 use serde       :: { ser::Serialize, Deserialize,  de::DeserializeOwned                             } ;
 use serde_yaml  :: { Value, Mapping, from_str                                                       } ;
@@ -102,7 +102,7 @@ impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
 		match &self.userset
 		{
 			Some( value ) => Some( value.clone().into() ),
-			None          => None          ,
+			None          => None                        ,
 		}
 	}
 
@@ -114,7 +114,7 @@ impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
 		match &self.runtime
 		{
 			Some( value ) => Some( value.clone().into() ),
-			None          => None          ,
+			None          => None                        ,
 		}
 	}
 
@@ -210,9 +210,13 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 		//
 		let data =
 
-			val2map_mut( meta.get_mut( &"default".into() )
+			val2map_mut
+			(
+				meta.get_mut( &"default".into() )
 
-				.ok_or( EkkeCfgError::ConfigParse )? )?;
+				.ok_or( EkkeCfgError::ConfigParse.context( "Default configuration must have a 'default' key in the root." ) )?
+
+			).context( "The 'default' entry in the configuration root must be an object." )?;
 
 
 		// Store the actual settings as defaults
