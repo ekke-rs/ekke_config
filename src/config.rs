@@ -6,6 +6,7 @@ use crate       :: { EkkeResult, EkkeCfgError                                   
 use ekke_merge  :: { Merge, MergeResult                                                             } ;
 
 
+
 /// A configuration object that can be created from multiple layers of yaml input. Later
 /// input will merge into the earlier data and override options that are already set.
 /// Objects will be merged recursively. Arrays contents will be replaced.
@@ -178,31 +179,6 @@ impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
 
 
 
-#[ inline( always ) ]
-//
-fn val2map_mut( val: &mut Value ) -> EkkeResult< &mut Mapping >
-{
-	match val
-	{
-		Value::Mapping(x) => Ok ( x                                ),
-		_                 => Err( EkkeCfgError::ConfigParse.into() ),
-	}
-}
-
-
-fn read_file( path: &Path ) -> EkkeResult< String >
-{
-	let     file       = File::open( path )?;
-	let mut buf_reader = BufReader::new( file );
-	let mut contents   = String::new();
-
-	buf_reader.read_to_string( &mut contents )?;
-
-	Ok( contents )
-}
-
-
-
 /// Convert from yaml string
 ///
 impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serialize
@@ -335,11 +311,46 @@ impl<T> TryFrom< &PathBuf > for Config<T> where T: Clone + DeserializeOwned + Se
 
 
 
+// Helper methods
+//
+#[ inline( always ) ]
+//
+fn val2map_mut( val: &mut Value ) -> EkkeResult< &mut Mapping >
+{
+	match val
+	{
+		Value::Mapping(x) => Ok ( x                                ),
+		_                 => Err( EkkeCfgError::ConfigParse.into() ),
+	}
+}
+
+
+fn read_file( path: &Path ) -> EkkeResult< String >
+{
+	let     file       = File::open( path )?;
+	let mut buf_reader = BufReader::new( file );
+	let mut contents   = String::new();
+
+	buf_reader.read_to_string( &mut contents )?;
+
+	Ok( contents )
+}
+
+
+
+
 #[ cfg( test ) ]
 //
 mod tests
 {
-	// use super::*;
+	// See tests folder
+	//
+	// Test:
+	// - basic usage from strings
+	// - basic usage from paths
+	// - adding runtime
+	// - override userset in runtime
+	// - reading: defaults, userset, runtime, usr_path, def_path,
 
 
 
