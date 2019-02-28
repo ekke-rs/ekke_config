@@ -57,13 +57,15 @@ fn main() -> Result<(), failure::Error>
 
 	// defaults and userset are still available
 	//
-	assert_eq!( config.default().my_app.log_lvl, "debug" );
 
 
 	// This is ugly at the moment. Since userset and runtime can pass in incomplete config,
 	// we cannot return a Settings object, so you get a Option< serde_yaml::Value >. ekke_config
 	// adds a json pointer lookup to serde_yaml::Value for more convenient lookup.
 	//
+	// default() does not return an option, since it has to exist as soon as a Config is created.
+	//
+	assert_eq!( config.default()         .jptr( "/my_app/log_lvl" ).unwrap(), "debug" );
 	assert_eq!( config.userset().unwrap().jptr( "/my_app/log_lvl" ).unwrap() , "warn" );
 	assert_eq!( config.runtime().unwrap().jptr( "/my_app/log_lvl" ).unwrap() , "info" );
 

@@ -14,9 +14,10 @@ use ekke_merge  :: { Merge, MergeResult                                         
 //
 pub struct Config<T> where T: Merge + Clone + Serialize
 {
-	defaults : T               ,
-	settings : T               ,
-	meta     : Mapping         ,
+	settings : T                 ,
+	meta     : Mapping           ,
+
+	default  :         Mapping   ,
 	userset  : Option< Mapping > ,
 	runtime  : Option< Mapping > ,
 }
@@ -24,8 +25,6 @@ pub struct Config<T> where T: Merge + Clone + Serialize
 
 impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 {
-
-
 	/// Merge userset settings into this config. Usually userset configuration comes
 	/// from a file in the users home directory, but in case the program allows modifying
 	/// configuration from a dialog, user configuration might change on runtime.
@@ -98,11 +97,11 @@ impl<T> Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
 	}
 
 
-	/// Get a reference to the default settings.
+	/// Get a copy of the defaults.
 	///
-	pub fn default( &self ) -> &T
+	pub fn default( &self ) -> Value
 	{
-		&self.defaults
+		self.default.clone().into()
 	}
 
 
@@ -255,7 +254,7 @@ impl<T> TryFrom< &str > for Config<T> where T: Merge + Clone + DeserializeOwned 
 
 		// Store the actual settings as defaults
 		//
-		let defaults: T = from_str( &serde_yaml::to_string( &data )? )? ;
+		let default: Mapping = from_str( &serde_yaml::to_string( &data )? )?;
 
 
 		// Read the userset config file
@@ -274,11 +273,11 @@ impl<T> TryFrom< &str > for Config<T> where T: Merge + Clone + DeserializeOwned 
 
 		Ok( Config
 		{
-			defaults                         ,
-			settings                         ,
-			userset                          ,
+			default        ,
+			settings       ,
+			userset        ,
 			meta    : meta ,
-			runtime : None                   ,
+			runtime : None ,
 		})
 	}
 }
