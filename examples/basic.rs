@@ -4,6 +4,9 @@ use serde       :: { Serialize, Deserialize        } ;
 
 
 
+// This defines valid layout of our configuration.
+// Once we parse into this, we can count on these properties being present and validated.
+//
 #[ derive( Serialize, Deserialize, Debug, Clone ) ]
 //
 struct Settings
@@ -45,6 +48,10 @@ fn main() -> Result<(), failure::Error>
 	//
 	let mut config: Config< Settings > = Config::try_from( Path::new( "data/defaults.yml" ) )?;
 
+
+	// Merge in more runtime configuration, from environment or command line options. Currently
+	// takes a yaml string... Not quite sure what the best type would be?
+	//
 	config.merge_runtime( "my_app: { log_lvl: info }" )?;
 
 

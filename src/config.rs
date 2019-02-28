@@ -1,6 +1,6 @@
 use failure     :: { Error, Fail                                                                    } ;
 use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf } ;
-use serde       :: { ser::Serialize, Deserialize, /*ser::Serializer,*/ de::DeserializeOwned         } ;
+use serde       :: { ser::Serialize, Deserialize,  de::DeserializeOwned                             } ;
 use serde_yaml  :: { Value, Mapping, from_str                                                       } ;
 use crate       :: { EkkeResult, EkkeCfgError                                                       } ;
 use ekke_merge  :: { Merge, MergeResult                                                             } ;
@@ -18,7 +18,8 @@ pub struct Config<T> where T: Clone + Serialize
 
 	// Meta settings
 	//
-	user_conf: Option< String  > ,
+	usr_path : Option< PathBuf > ,
+	def_path : Option< PathBuf > ,
 
 	default  :         Mapping   ,
 	userset  : Option< Mapping > ,
@@ -117,6 +118,48 @@ impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
 	}
 
 
+
+	/// Getter for the path to the default configuration file
+	///
+	pub fn def_path( &self ) -> &Option< PathBuf >
+	{
+		&self.def_path
+	}
+
+
+
+	/// Getter for the path to the user configuration file
+	///
+	pub fn usr_path( &self) -> &Option< PathBuf >
+	{
+		&self.usr_path
+	}
+
+
+
+	/// Update the path to the default configuration file.
+	/// Updating this has no side-effects. It's just stored for future reference.
+	/// Notably, this will not reparse the new file. This setter is mainly meant for
+	/// when the Config was made from a string or File object and ekke_config doesn't
+	/// know on object creation where the defaults come from.
+	///
+	pub fn set_def_path( &mut self, path: Option< PathBuf > )
+	{
+		self.def_path = path
+	}
+
+
+
+	/// Update the path to the user configuration file.
+	/// Updating this has no side-effects. It's just stored for future reference.
+	/// Notably, this will not reparse the new file.
+	///
+	pub fn set_usr_path( &mut self, path: Option< PathBuf > )
+	{
+		self.usr_path = path
+	}
+
+
 	// Regenerate the final settings from intermediate values. For when userset or runtime
 	// have changed.
 	//
@@ -134,26 +177,9 @@ impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
 }
 
 
-/*fn val2map( val: Value ) -> EkkeResult< Mapping >
-{
-	match val
-	{
-		Value::Mapping(x) => Ok( x ),
-		_                 => return Err( EkkeCfgError::ConfigParse.into() )
-	}
-}
 
-
-fn val2map_ref( val: &Value ) -> EkkeResult< &Mapping >
-{
-	match val
-	{
-		Value::Mapping(x) => Ok( x ),
-		_                 => return Err( EkkeCfgError::ConfigParse.into() )
-	}
-}*/
-
-
+#[ inline( always ) ]
+//
 fn val2map_mut( val: &mut Value ) -> EkkeResult< &mut Mapping >
 {
 	match val
@@ -164,7 +190,7 @@ fn val2map_mut( val: &mut Value ) -> EkkeResult< &mut Mapping >
 }
 
 
-fn read_file( path: &str ) -> EkkeResult< String >
+fn read_file( path: &Path ) -> EkkeResult< String >
 {
 	let     file       = File::open( path )?;
 	let mut buf_reader = BufReader::new( file );
@@ -174,26 +200,6 @@ fn read_file( path: &str ) -> EkkeResult< String >
 
 	Ok( contents )
 }
-
-/*
-impl<T> Merge for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
-{
-	fn merge( &mut self, other: Self ) -> EkkeResult<()>
-	{
-		self.data.merge( other.data )
-	}
-}*/
-
-
-/*
-impl<T> Serialize for Config<T> where T: Merge + Clone + DeserializeOwned + Serialize
-{
-	fn serialize< S >( &self, serializer: S ) -> Result< S::Ok, S::Error > where S: Serializer
-	{
-		self.data.serialize( serializer )
-	}
-}*/
-
 
 
 
@@ -208,7 +214,7 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 		let mut meta   : Mapping           = from_str( input )? ;
 		let mut userset: Option< Mapping > = None;
 
-		let mut user_conf = None;
+		let mut usr_path = None;
 
 		// Get the userset config file
 		// If it's present...
@@ -219,8 +225,8 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 			//
 			match path
 			{
-				Value::String( path ) => user_conf = Some( path.clone() ),
-				_                     => return Err( EkkeCfgError::ConfigParse.context( "user_conf must be a string" ).into() )
+				Value::String( path ) => usr_path = Some( PathBuf::from( path ) ),
+				_                     => return Err( EkkeCfgError::ConfigParse.context( "usr_path must be a string" ).into() )
 			}
 		}
 
@@ -241,9 +247,9 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 
 		// Read the userset config file
 		//
-		if let Some( path ) = &user_conf
+		if let Some( path ) = &usr_path
 		{
-			let users: Mapping = from_str( &read_file( &path )? )?;
+			let users: Mapping = from_str( &read_file( path )? )?;
 
 			userset = Some( users.clone() );
 		}
@@ -266,8 +272,10 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 		{
 			default         ,
 			settings        ,
-			user_conf       ,
 			userset         ,
+
+			usr_path        ,
+			def_path: None  ,
 			runtime : None  ,
 		})
 	}
@@ -284,7 +292,8 @@ impl<T> TryFrom< &File > for Config<T> where T: Clone + DeserializeOwned + Seria
 	fn try_from( file: &File ) -> Result< Self, Self::Error >
 	{
 		let mut buf_reader = BufReader::new(file);
-		let mut contents = String::new();
+		let mut contents   = String::new();
+
 		buf_reader.read_to_string( &mut contents )?;
 
 		Config::try_from( contents.as_str() )
@@ -302,7 +311,11 @@ impl<T> TryFrom< &Path > for Config<T> where T: Clone + DeserializeOwned + Seria
 	fn try_from( path: &Path ) -> Result< Self, Self::Error >
 	{
 		let file = File::open( path )?;
-		Config::try_from( &file )
+		let mut cfg = Config::try_from( &file )?;
+
+		cfg.def_path = Some( PathBuf::from( path ) );
+
+		Ok( cfg )
 	}
 }
 
@@ -316,8 +329,7 @@ impl<T> TryFrom< &PathBuf > for Config<T> where T: Clone + DeserializeOwned + Se
 
 	fn try_from( path: &PathBuf ) -> Result< Self, Self::Error >
 	{
-		let file = File::open( path )?;
-		Config::try_from( &file )
+		Config::try_from( Path::new( path ) )
 	}
 }
 
