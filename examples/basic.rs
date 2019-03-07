@@ -48,6 +48,10 @@ fn main() -> Result<(), failure::Error>
 	//
 	let mut config: Config< Settings > = Config::try_from( Path::new( "data/defaults.yml" ) )?;
 
+	// new values are merged in from userset yml file
+	//
+	assert_eq!( config.get().my_app.log_lvl, "warn" );
+
 
 	// Merge in more runtime configuration, from environment or command line options. Currently
 	// takes a yaml string... Not quite sure what the best type would be?

@@ -1,9 +1,14 @@
-use failure     :: { Error, Fail, ResultExt                                                         } ;
-use std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf } ;
-use serde       :: { ser::Serialize, Deserialize,  de::DeserializeOwned                             } ;
-use serde_yaml  :: { Value, Mapping, from_str                                                       } ;
-use crate       :: { EkkeResult, EkkeCfgError                                                       } ;
-use ekke_merge  :: { Merge, MergeResult                                                             } ;
+use
+{
+	failure     :: { Error, Fail, ResultExt                                                                     } ,
+	std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf, fmt::Debug } ,
+	serde       :: { ser::Serialize, Deserialize,  de::DeserializeOwned                                         } ,
+	serde_yaml  :: { Value, Mapping, from_str                                                                   } ,
+	shellexpand :: { tilde                                                                                      } ,
+
+	crate       :: { EkkeResult, EkkeCfgError                                                                   } ,
+	ekke_merge  :: { Merge, MergeResult                                                                         } ,
+};
 
 
 
@@ -13,7 +18,7 @@ use ekke_merge  :: { Merge, MergeResult                                         
 ///
 #[ derive( Debug, Clone, PartialEq, Eq, Default, Deserialize ) ]
 //
-pub struct Config<T> where T: Clone + Serialize
+pub struct Config<T> where T: Clone + Serialize + Debug
 {
 	settings : T                 ,
 
@@ -29,7 +34,7 @@ pub struct Config<T> where T: Clone + Serialize
 
 
 
-impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
+impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize + Debug
 {
 	/// Merge userset settings into this config. Usually userset configuration comes
 	/// from a file in the users home directory, but in case the program allows modifying
@@ -181,8 +186,9 @@ impl<T> Config<T> where T: Clone + DeserializeOwned + Serialize
 
 /// Convert from yaml string
 ///
-impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serialize + Debug
 {
+
 	type Error = Error;
 
 	fn try_from( input: &str ) -> Result< Self, Self::Error >
@@ -229,7 +235,17 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 		//
 		if let Some( path ) = &usr_path
 		{
-			let users: Mapping = from_str( &read_file( path )? )?;
+			let users: Mapping =
+
+				// This reads the file from the userset property as given in defaults.
+				// shellexpand::tilde wil expand the home directory.
+				// TODO: we should probably use path.to_str and throw an error if it's not valid unicode
+				// TODO: make cross platform
+				//
+				from_str( &read_file( &Path::new( tilde( path.to_string_lossy().as_ref() ).as_ref() ) )
+
+				.context( format!( "{:?}", path ) )? ).context( format!( "Failed to parse yaml at: {:?}", path ) )?
+			;
 
 			userset = Some( users.clone() );
 		}
@@ -243,10 +259,12 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 		//
 		if let Some( us ) = &userset { def.merge( us.clone() )?; }
 
+
 		// use deserialize, serialize to convert Mapping to T
 		//
 		let settings: T = from_str( &serde_yaml::to_string( &def )? )?;
 
+		dbg!( &settings );
 
 		Ok( Config
 		{
@@ -265,7 +283,7 @@ impl<T> TryFrom< &str > for Config<T> where T: Clone + DeserializeOwned + Serial
 
 /// Convert from a file containing an yaml string
 ///
-impl<T> TryFrom< &File > for Config<T> where T: Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &File > for Config<T> where T: Clone + DeserializeOwned + Serialize + Debug
 {
 	type Error = Error;
 
@@ -284,13 +302,13 @@ impl<T> TryFrom< &File > for Config<T> where T: Clone + DeserializeOwned + Seria
 
 /// Convert from a file containing an yaml string
 ///
-impl<T> TryFrom< &Path > for Config<T> where T: Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &Path > for Config<T> where T: Clone + DeserializeOwned + Serialize + Debug
 {
 	type Error = Error;
 
 	fn try_from( path: &Path ) -> Result< Self, Self::Error >
 	{
-		let file = File::open( path )?;
+		let file = File::open( path ).context( format!( "{:?}", path ) )?;
 		let mut cfg = Config::try_from( &file )?;
 
 		cfg.def_path = Some( PathBuf::from( path ) );
@@ -303,7 +321,7 @@ impl<T> TryFrom< &Path > for Config<T> where T: Clone + DeserializeOwned + Seria
 
 /// Convert from a file containing an yaml string
 ///
-impl<T> TryFrom< &PathBuf > for Config<T> where T: Clone + DeserializeOwned + Serialize
+impl<T> TryFrom< &PathBuf > for Config<T> where T: Clone + DeserializeOwned + Serialize + Debug
 {
 	type Error = Error;
 
