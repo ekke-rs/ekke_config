@@ -1,15 +1,4 @@
-use
-{
-	failure     :: { Error, Fail, ResultExt                                                                     } ,
-	std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf, fmt::Debug } ,
-	serde       :: { ser::Serialize, Deserialize,  de::DeserializeOwned                                         } ,
-	serde_yaml  :: { Value, Mapping, from_str                                                                   } ,
-	shellexpand :: { tilde                                                                                      } ,
-
-	crate       :: { EkkeResult, EkkeCfgError                                                                   } ,
-	ekke_merge  :: { Merge, MergeResult                                                                         } ,
-};
-
+use crate :: { import::*, EkkeResult, EkkeCfgError };
 
 
 /// A configuration object that can be created from multiple layers of yaml input. Later

@@ -1,4 +1,4 @@
-use failure    :: { Error, Fail  } ;
+use crate :: { import::* };
 
 
 /// Custom result type, Allows to omit error type since it's always

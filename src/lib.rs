@@ -40,3 +40,20 @@ pub use error::
 	EkkeResult,
 	EkkeCfgError
 };
+
+
+mod import
+{
+	#[ allow( unused_imports ) ]
+	//
+	pub( crate ) use
+	{
+		failure     :: { Error, Fail, ResultExt                                                                     } ,
+		std         :: { convert::TryFrom, fs::File, io::BufReader, io::Read, path::Path, path::PathBuf, fmt::Debug } ,
+		serde       :: { ser::Serialize, Deserialize,  de::DeserializeOwned                                         } ,
+		serde_yaml  :: { Value, Mapping, from_str                                                                   } ,
+		shellexpand :: { tilde                                                                                      } ,
+
+		ekke_merge  :: { Merge, MergeResult                                                                         } ,
+	};
+}
