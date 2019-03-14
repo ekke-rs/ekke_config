@@ -1,16 +1,19 @@
-[package]
-
-	name    = "ekke_config"
-	version = "0.1.0"
-	authors = ["Naja Melan <najamelan@autistici.org>"]
-	edition = "2018"
-
-
+# Auto-generated from "Cargo.yml"
 [dependencies]
+failure = "0.1.5"
+serde_yaml = "0.8.8"
+shellexpand = "1.0.0"
 
-	failure      = "0.1.5"
-	serde        = { version = "1.0.88", features = ["derive"] }
-	serde_yaml   = "0.8.8"
-	shellexpand  = "1.0.0"
+[dependencies.ekke_merge]
+features = ["serdeyaml"]
+path = "../ekke_merge"
 
-	ekke_merge   = { path = "../ekke_merge", features = [ "serdeyaml" ] }
+[dependencies.serde]
+features = ["derive"]
+version = "1.0.88"
+
+[package]
+authors = ["Naja Melan <najamelan@autistici.org>"]
+edition = "2018"
+name = "ekke_config"
+version = "0.1.0"
